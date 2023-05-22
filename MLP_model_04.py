@@ -12,12 +12,6 @@ from sklearn.decomposition import PCA
 
 warnings.filterwarnings('ignore')
 
-"""
-start и end - период, на котором будет проходить обучение.
-start_test и end_test - период, на котором будет проходить предсказание.
-seq_len - количество предыдущих дневных цен (признаков), на основе которых делается предсказание цены дня.
-"""
-
 start = "2017-01-01"
 end = "2023-04-01"
 #start_test = "2021-12-15"
@@ -59,17 +53,6 @@ yf.pdr_override()
 
 
 def get_stock_data_all(ticker, start_date, end_date, file):
-    """
-    Получает исторические данные по дневным ценам акций между датами
-    :param ticker: компания или компании, чьи данные должны быть извлечены
-    :type ticker: string or list of strings
-    :param start_date: начальная дата получения цен на акции
-    :type start_date: string of date "YYYY-mm-dd"
-    :param end_date: конечная дата получения цен на акции
-    :type end_date: string of date "YYYY-mm-dd"
-    :param file: имя возвращаемого файла с данными
-    :return: файл формата csv
-    """
     i = 1
     all_data = 0
     while i > 0:
@@ -90,13 +73,6 @@ def get_stock_data_all(ticker, start_date, end_date, file):
 
 
 def get_X_Y_all(data, seq_len, list_x, list_x_all, list_x_1, list_x_2, list_x_3, list_x_4, list_x_5, list_y):
-    """
-    Преобразует данные, разбивая на признаки и ответы.
-    :param data: исходный массив данных
-    :param seq_len: количество признаков
-    :param list_x: список, в который добавляются признаки
-    :param list_y: список, в который добавляются ответы
-    """
     for i in range(len(data) - seq_len):
         i1 = np.array(data.iloc[i: i + seq_len, 1])
         i2 = np.array([data.iloc[i + seq_len, 1]], np.float64)
@@ -116,13 +92,9 @@ def get_X_Y_all(data, seq_len, list_x, list_x_all, list_x_1, list_x_2, list_x_3,
         list_y.append(i2)
 
 
-# Получим три массива данных - тренировочный, для предсказания и для настройки скалера.
-
 get_stock_data_all(ticker, start, end, train_file_all)
 get_stock_data_all(ticker, start_test, end_test, test_file_all)
 get_stock_data_all(ticker, start, end_test, scal_file_all)
-
-# Разобьем полученные данные на признаки и ответы.
 
 data = pd.read_csv(train_file_all, encoding='utf-8')
 get_X_Y_all(data, seq_len, x, x_all, x_1, x_2, x_3, x_4, x_5, y)
@@ -132,8 +104,6 @@ get_X_Y_all(new_data, seq_len, new_x, new_x_all, new_x_1, new_x_2, new_x_3, new_
 
 scal_data = pd.read_csv(scal_file_all, encoding='utf-8')
 get_X_Y_all(scal_data, seq_len, scal_x, scal_x_all, scal_x_1, scal_x_2, scal_x_3, scal_x_4, scal_x_5, scal_y)
-
-# Преобразуем данные в формат, используемый в нейронной сети.
 
 x = np.array(x)
 x_all = np.array(x_all)
@@ -159,8 +129,6 @@ scal_x_3 = np.array(scal_x_3)
 scal_x_4 = np.array(scal_x_4)
 scal_x_5 = np.array(scal_x_5)
 scal_y = np.array(scal_y)
-
-# Произведем скалинг данных
 
 X = [x_all, x_1, x_2, x_3, x_4, x_5]
 NEW_X = [new_x_all, new_x_1, new_x_2, new_x_3, new_x_4, new_x_5]
@@ -232,8 +200,6 @@ for i in range(len(new_x_all_pca)):
 
 new_x_pca = new_x_all_pca[:, :, :2]
 
-# Разобьем тренировочные данные на обучение и проверку в соотношении 9 к 1 и перемешаем их.
-
 X_train, X_valid, y_train, y_valid = train_test_split(x, y, test_size=0.1, random_state=42, shuffle=True)
 X_train_all, X_valid_all, y_train_all, y_valid_all = train_test_split(x_all, y, test_size=0.1, random_state=42,
                                                                       shuffle=True)
@@ -248,48 +214,25 @@ X_train_pca, X_valid_pca, y_train_pca, y_valid_pca = train_test_split(x_pca, y, 
 X_train_all_pca, X_valid_all_pca, y_train_all_pca, y_valid_all_pca = train_test_split(x_all_pca, y, test_size=0.1,
                                                                                       random_state=42, shuffle=True)
 
-"""
-Настроим нейтронную сеть.
-Модель Sequential представляет собой линейный стек слоев.
-Создадим модель Sequential, передав в конструктор список экземпляров слоя.
-Для первых двух слоев используем MLP (multilayer perceptron) - многослойный перцептрон.
-Полностью связанные слои определяются с помощью класса Density. Мы можем указать количество нейронов или узлов в слое в качестве первого аргумента, а также указать функцию активации, используя аргумент активации.
-Мы будем использовать функцию активации ReLU (rectified linear unit).
-Выходной слой также будет состоять из 1 нейрона с функцией активации ReLU. Функция активации определяет выходное значение нейрона. Выходной нейрон также оставим без нелинейности, чтобы иметь возможность прогнозировать любое значение.
-Раньше считалось, что Sigmoid и Tanh активационные функции были предпочтительны для всех слоев. В наши дни более высокая производительность достигается с помощью функции активации ReLU.
-"""
 
 model = tf.keras.models.Sequential()
 model.add(tf.keras.layers.Dense(100, activation=tf.nn.relu))
 model.add(tf.keras.layers.Dense(100, activation=tf.nn.relu))
 model.add(tf.keras.layers.Dense(1, activation=tf.nn.relu))
 
-"""
-Перед обучением модели необходимо настроить процесс обучения, что делается с помощью метода компиляции. Он получает два аргумента:
-1) Оптимизатор. Используем Adam, алгоритм градиентной оптимизации стохастических целевых функций первого порядка, основанный на адаптивных оценках моментов более низкого порядка. Этот метод прост в реализации, вычислительно эффективен, имеет небольшие требования к памяти, инвариантен к диагональному масштабированию градиентов и хорошо подходит для задач, которые являются большими с точки зрения данных и/или параметров. Этот метод также подходит для нестационарных задач и задач с очень шумными и / или разреженными градиентами. Эмпирические результаты показывают, что Адам хорошо работает на практике и выгодно отличается от других методов стохастической оптимизации.
-2) Функция потерь. Это та цель, которую модель постарается свести к минимуму. Используем среднеквадратическую ошибку (mean squared error, MSE). Физического смысла MSE не имеет, но чем ближе к нулю, тем модель лучше.
-"""
 
 model.compile(optimizer="adam", loss="mean_squared_error")
 
-"""
-Обучим модель, используя 100 эпох.
-Эпоха - один проход по всему набору данных, используемый для разделения обучения на отдельные фазы, что полезно для ведения логов и периодической оценки.
-"""
 
 model.fit(X_train, y_train, epochs=100)
 
 print(model.evaluate(X_valid, y_valid))
-
-# Предскажем цены с помощью обученной модели и произведем обратный скалинг.
 
 y1 = scaler_y.inverse_transform(model.predict(X_valid))
 y2 = scaler_y.inverse_transform(model.predict(new_x))
 y3 = scaler_y.inverse_transform(y_valid)
 
 print(y2)
-
-# Запишем данные в файлы, для дальнейшего сравнения и построения графиков в другой части программы.
 
 np.save('MLP_y_pred', y1)
 np.save('MLP_new_y', y2)
